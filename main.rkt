@@ -1,5 +1,5 @@
 #lang web-server/insta
-(require dropbox crypto)
+(require dropbox crypto dotenv)
 
 (define (start req)
   (response/xexpr
