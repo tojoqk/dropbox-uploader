@@ -1,5 +1,5 @@
 #lang web-server/insta
-(require crypto dotenv)
+(require simple-http crypto dotenv)
 
 (define (start req)
   (response/xexpr
