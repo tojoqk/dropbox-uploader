@@ -3,4 +3,5 @@
 (define deps '("base"
                "web-server-lib"
                "crypto"
+               "argo"
                "dotenv"))
