@@ -3,6 +3,57 @@
  (require net/http-client argo json)
 (define (access-token) (getenv "DROPBOX_ACCESS_TOKEN"))
 
+;;; JSON Schema
+(define string/t "string")
+(define number/t "number")
+(define boolean/t "boolean")
+(define integer/t "integer")
+(define-syntax-rule (object/t (property ...) (req ...))
+  (hash 'type "object"
+        'properties (let ((h (make-hash)))
+                      (hash-set! h (car property) (cdr property)) ...
+                      h)
+        'required (map (compose symbol->string car) (list req ...))))
+
+(define (make-property name body)
+  (cons name body))
+(define-syntax define-property
+  (syntax-rules ()
+    [(_ name property #:type t)
+     (define name (make-property 'property (hash 'type t)))]
+    [(_ name property schema)
+     (define name (make-property 'property schema))]))
+
+(define-property url/p url #:type string/t)
+(define-property password/p password #:type string/t)
+(define-property path/p path #:type string/t)
+(define-property recursive/p recursive #:type boolean/t)
+(define-property include_media_info/p include_media_info #:type boolean/t)
+(define-property include_deleted/p include_deleted #:type boolean/t)
+(define-property include_has_explicit_shared_members/p include_has_explicit_shared_members #:type boolean/t)
+(define-property include_mounted_folders/p include_has_explicit_shared_members #:type boolean/t)
+(define-property limit/p limit #:type integer/t)
+(define-property shared_link/p shared_link (object/t (url/p password/p) (url/p password/p)))
+;; TODO Define include_property_groups/p
+
+(define list_folder/o
+  (object/t (path/p recursive/p include_media_info/p include_deleted/p
+                    include_has_explicit_shared_members/p include_mounted_folders/p
+                    limit/p shared_link/p)
+            (path/p)))
+
+(define (api host uri schema json #:headers [headers '()] #:data [data #f])
+  (check-json/schema json schema)
+  (http-sendrecv host uri
+                 #:ssl? #t
+                 #:headers `(,(format "Authorization: Bearer ~a" (access-token))
+                             ,(if data
+                                  (format "Dropbox-API-Arg: ~a" (jsexpr->string json))
+                                  "Content-Type: application/json"))
+                 #:method 'POST
+                 #:data (or data
+                            (jsexpr->string json))))
+
 (struct empty-field ())
 (define-syntax (define-json-api stx)
   (syntax-parse stx
