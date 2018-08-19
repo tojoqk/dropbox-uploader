@@ -12,11 +12,6 @@
   (-> (listof property?) hash?)
   (list->hash (map (λ (x) (cons (property-name x) (property-body x))) xs)))
 
-(define-syntax (object stx)
-  (syntax-parse stx
-    [(_ (key val) ...)
-     #`(begin #,(flatten-all-begins #'(begin hash (begin 'key val) ...)))]))
-
 ;;; JSON Schema
 (define string/t "string")
 (define number/t "number")
@@ -30,7 +25,7 @@
      (required . ,(map (compose symbol->string property-name) reqs)))))
 
 (define-syntax-rule (define-property-type name p t)
-  (define name (property 'p (object [type t]))))
+  (define name (property 'p (hash 'type t))))
 (define-syntax-rule (define-property-object name p obj)
   (define name (property 'p obj)))
 
