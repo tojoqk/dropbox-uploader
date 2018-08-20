@@ -28,34 +28,34 @@
   (regexp-match? #rx" 200 " (bytes->string/utf-8 status)))
 
 (define api.dropboxapi.com "api.dropboxapi.com")
-(define (list_folder json)
+(define (/2/files/list_folder json)
   (json-api api.dropboxapi.com "/2/files/list_folder" json))
 
-(define (list_folder/continue json)
+(define (/2/files/list_folder/continue json)
   (json-api api.dropboxapi.com "/2/files/list_folder/continue" json))
 
 (define (list-folder dirs)
-  (define (continue cursor names)
+  (define (continue cursor entries)
     (sleep 0.1)
-    (let-values ([(status headers containts) (list_folder/continue (hash 'cursor cursor))])
+    (let-values ([(status headers containts) (/2/files/list_folder/continue (hash 'cursor cursor))])
       (match (and (ok? status) (read-json containts))
         [(hash-table
           ('has_more has-more?)
           ('cursor cursor)
-          ('entries (list (hash-table ('name new-names)) ...)))
-         (let ([names (append-reverse new-names names)])
+          ('entries new-entries))
+         (let ([entries (append-reverse new-entries entries)])
            (if has-more?
-               (continue cursor names)
-               (reverse names)))]
+               (continue cursor entries)
+               (reverse entries)))]
         [else #f])))
   (define path (if (null? dirs) "" (string-append "/" (string-join dirs "/"))))
-  (let-values ([(status headers containts) (list_folder (hash 'path path))])
+  (let-values ([(status headers containts) (/2/files/list_folder (hash 'path path))])
     (match (and (ok? status) (read-json containts))
       [(hash-table
         ('has_more has-more?)
         ('cursor cursor)
-        ('entries (list (hash-table ('name names)) ...)))
+        ('entries entries))
        (if has-more?
-           (continue cursor (reverse names))
-           names)]
+           (continue cursor (reverse entries))
+           entries)]
       [else #f])))
