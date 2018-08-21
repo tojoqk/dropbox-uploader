@@ -1,6 +1,6 @@
 #lang racket
 (require (for-syntax racket/base racket/list syntax/parse syntax/flatten-begin))
-(require racket/contract net/http-client json)
+(require racket/contract net/http-client json sha)
 (require (only-in srfi/1 append-reverse))
 (define (access-token) (getenv "DROPBOX_ACCESS_TOKEN"))
 
@@ -69,3 +69,20 @@
 
 (define (/2/files/download json)
   (data-api content.dropboxapi.com "/2/files/download" json))
+
+(define block-size (* 4 1024 1024))
+(define (content-hash f)
+  (call-with-input-file f
+    (λ (p)
+      (define (read-block) (read-bytes block-size p))
+      (let ([sp (open-output-bytes)])
+        (let loop ([block (read-block)])
+          (cond
+            [(eof-object? block)
+             (string-append*
+              (map (curryr ~r #:base 16 #:min-width 2 #:pad-string "0")
+                   (bytes->list (sha256 (get-output-bytes sp)))))]
+            [else
+             (write-bytes (sha256 block) sp)
+             (loop (read-block))]))))))
+
