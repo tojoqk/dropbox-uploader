@@ -59,3 +59,13 @@
            (continue cursor (reverse entries))
            entries)]
       [else #f])))
+
+(define content.dropboxapi.com "content.dropboxapi.com")
+
+(define (headers->dropbox-api-result headers)
+  (for/first ([header (map bytes->string/utf-8 headers)]
+              #:when (regexp-match? #rx"^dropbox-api-result:" header))
+    (string->jsexpr (substring header 20))))
+
+(define (/2/files/download json)
+  (data-api content.dropboxapi.com "/2/files/download" json))
