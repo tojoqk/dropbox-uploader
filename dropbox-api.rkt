@@ -86,3 +86,24 @@
              (write-bytes (sha256 block) sp)
              (loop (read-block))]))))))
 
+(define (download path)
+  (define-values (status headers contents) (/2/files/download (hasheq 'path path)))
+  (cond
+    [(ok? status)
+     (define jsexpr (headers->dropbox-api-result headers))
+     (let ([filename (make-temporary-file (format "encrypt_dropbox_dl_~a_~~a" (file-name-from-path path)))])
+       (call-with-output-file filename
+         (λ (p)
+           (define (read-block) (read-bytes block-size contents))
+           (let loop ([block (read-block)])
+             (cond
+               [(eof-object? block) 'done]
+               [else
+                (write-bytes block p)
+                (loop (read-block))])))
+         #:exists 'replace)
+       (if (string=? (content-hash filename) (hash-ref jsexpr 'content_hash))
+           filename
+           (error 'download "mismatch content-hash")))]
+    [(headers->dropbox-api-result headers) => (λ (x) (error 'download x))]
+    [else (error 'download (port->string contents))]))
