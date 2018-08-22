@@ -20,7 +20,9 @@
   (http-sendrecv host uri
                  #:ssl? #t
                  #:headers `(,(format "Authorization: Bearer ~a" (access-token))
-                             ,(format "Dropbox-API-Arg: ~a" (jsexpr->string json)))
+                             ,(format "Dropbox-API-Arg: ~a" (jsexpr->string json))
+                             ,@(if data (list "Content-Type: application/octet-stream") '())
+                             ,@headers)
                  #:method 'POST
                  #:data data))
 
@@ -107,3 +109,62 @@
            (error 'download "mismatch content-hash")))]
     [(headers->dropbox-api-result headers) => (λ (x) (error 'download x))]
     [else (error 'download (port->string contents))]))
+
+(define (/2/files/upload_session/start json data)
+  (data-api content.dropboxapi.com "/2/files/upload_session/start" json #:data data))
+
+(define (/2/files/upload_session/append json data)
+  (data-api content.dropboxapi.com "/2/files/upload_session/append_v2" json #:data data))
+
+(define (/2/files/upload_session/finish json)
+  (data-api content.dropboxapi.com "/2/files/upload_session/finish" json
+            #:headers (list "Content-Type: application/octet-stream")))
+
+
+(define current-chunk-size (make-parameter (* 4 1024 1024)))
+(define (upload-file f path)
+  (let ([ch (content-hash f)])
+    (call-with-input-file f
+      (λ (ip)
+        (define (read-chunk) (read-bytes (current-chunk-size) ip))
+        (define chunk (read-chunk))
+        (define-values (status headers content)
+          (/2/files/upload_session/start (hasheq) chunk))
+        (cond
+          [(ok? status)
+           (define result (read-json content))
+           (define session-id (hash-ref result 'session_id))
+           (let loop ([chunk (read-chunk)]
+                      [offset (bytes-length chunk)])
+             (displayln offset)
+             (cond
+               [(eof-object? chunk)
+                (define-values (status headers content)
+                  (/2/files/upload_session/finish (hasheq 'cursor
+                                                          (hasheq 'session_id session-id
+                                                                  'offset offset)
+                                                          'commit
+                                                          (hasheq 'path path
+                                                                  'mode "overwrite"))))
+                (cond
+                  [(ok? status)
+                   (define result (read-json content))
+                   (cond
+                     [(string=? ch (hash-ref result 'content_hash)) 'done]
+                     [else
+                      (error 'upload "mismatch content-hash")])]
+                  [else
+                   (error 'upload (port->string content))])]
+               [else
+                (define-values (status headers content)
+                  (/2/files/upload_session/append (hasheq 'cursor
+                                                          (hasheq 'session_id session-id
+                                                                  'offset offset))
+                                                  chunk))
+                (cond
+                  [(ok? status)
+                   (loop (read-chunk) (+ offset (bytes-length chunk)))]
+                  [else
+                   (error 'upload (port->string content))])]))]
+          [else
+           (error 'upload (port->string content))])))))
