@@ -29,37 +29,62 @@
   (regexp-match? #rx" 200 " (bytes->string/utf-8 status)))
 
 (define api.dropboxapi.com "api.dropboxapi.com")
+(define (/2/files/get_metadata json)
+  (json-api api.dropboxapi.com "/2/files/get_metadata" json))
+
+(define (get-metadata path)
+  (let-values ([(status headers containts) (/2/files/get_metadata (hash 'path path))])
+    (and (ok? status) (read-json containts))))
+(provide/contract [get-metadata (-> string? (or/c jsexpr? false/c))])
+
 (define (/2/files/list_folder json)
   (json-api api.dropboxapi.com "/2/files/list_folder" json))
 
 (define (/2/files/list_folder/continue json)
   (json-api api.dropboxapi.com "/2/files/list_folder/continue" json))
 
-(define (list-folder dirs)
-  (define (continue cursor entries)
-    (sleep 0.1)
-    (let-values ([(status headers containts) (/2/files/list_folder/continue (hash 'cursor cursor))])
+(define (list-folder path)
+  (let ([path (if (string=? path "/") "" path)])
+    (let-values ([(status headers containts) (/2/files/list_folder (hash 'path path))])
       (match (and (ok? status) (read-json containts))
         [(hash-table
           ('has_more has-more?)
           ('cursor cursor)
-          ('entries new-entries))
-         (let ([entries (append-reverse new-entries entries)])
-           (if has-more?
-               (continue cursor entries)
-               (reverse entries)))]
-        [else #f])))
-  (define path (if (null? dirs) "" (string-append "/" (string-join dirs "/"))))
-  (let-values ([(status headers containts) (/2/files/list_folder (hash 'path path))])
-    (match (and (ok? status) (read-json containts))
-      [(hash-table
-        ('has_more has-more?)
-        ('cursor cursor)
-        ('entries entries))
-       (if has-more?
-           (continue cursor (reverse entries))
-           entries)]
-      [else #f])))
+          ('entries entries))
+         (if has-more?
+             (let continue ([cursor cursor]
+                            [entries (reverse entries)])
+               (sleep 0.1)
+               (let-values ([(status headers containts) (/2/files/list_folder/continue (hash 'cursor cursor))])
+                 (match (and (ok? status) (read-json containts))
+                   [(hash-table
+                     ('has_more has-more?)
+                     ('cursor cursor)
+                     ('entries new-entries))
+                    (let ([entries (append-reverse new-entries entries)])
+                      (if has-more?
+                          (continue cursor entries)
+                          (reverse entries)))]
+                   [else #f])))
+             entries)]
+        [else #f]))))
+(provide/contract [list-folder (-> string? (or/c (listof jsexpr?) false/c))])
+
+(define (/2/files/delete_v2 jsexpr)
+  (json-api api.dropboxapi.com "/2/files/delete_v2" jsexpr))
+
+(define (delete path)
+  (let-values ([(status headers containts) (/2/files/delete_v2 (hash 'path path))])
+    (and (ok? status) (read-json containts))))
+(provide/contract [delete (-> string? (or/c jsexpr? false/c))])
+
+(define (/2/files/create_folder_v2 jsexpr)
+  (json-api api.dropboxapi.com "/2/files/create_folder_v2" jsexpr))
+
+(define (create-folder path)
+  (let-values ([(status headers containts) (/2/files/create_folder_v2 (hash 'path path))])
+    (and (ok? status) (read-json containts))))
+(provide/contract [create-folder (-> string? (or/c jsexpr? false/c))])
 
 (define content.dropboxapi.com "content.dropboxapi.com")
 
