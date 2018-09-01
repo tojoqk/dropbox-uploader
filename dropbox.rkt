@@ -203,4 +203,4 @@
              (error 'upload (port->string content))])]))]
     [else
      (error 'upload (port->string content))]))
-(provide/contract [upload (-> string? (-> bytes?) jsexpr?)])
+(provide/contract [upload (-> string? (-> (or/c bytes? eof-object?)) jsexpr?)])
