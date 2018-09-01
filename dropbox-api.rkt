@@ -87,7 +87,6 @@
              (write-bytes (sha256 block) sp)
              (loop (read-block))]))))))
 
-(define (download write-chunk #:chunk-size [chunk-size (* 4 1024 1024)])
 (define (download-file path filename #:chunk-size [chunk-size (* 4 1024 1024)])
   (call-with-output-file filename
     (λ (p) (download path (λ (chunk) (write-bytes chunk p))))
@@ -95,6 +94,7 @@
   (if (string=? (content-hash filename) (hash-ref jsexpr 'content_hash))
       filename
       (error 'download-file "mismatch content-hash" filename)))
+(define (download path write-chunk #:chunk-size [chunk-size (* 4 1024 1024)])
   (define-values (status headers contents) (/2/files/download (hasheq 'path path)))
   (cond
     [(ok? status)
