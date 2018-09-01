@@ -88,12 +88,16 @@
              (loop (read-block))]))))))
 
 (define (download-file path filename #:chunk-size [chunk-size (* 4 1024 1024)])
-  (call-with-output-file filename
-    (λ (p) (download path (λ (chunk) (write-bytes chunk p))))
-    #:exists 'replace)
+  (define jsexpr
+    (call-with-output-file filename
+      (λ (p) (download path (λ (chunk) (write-bytes chunk p))))
+      #:exists 'replace))
   (if (string=? (content-hash filename) (hash-ref jsexpr 'content_hash))
-      filename
+      jsexpr
       (error 'download-file "mismatch content-hash" filename)))
+(provide/contract [download-file (-> string? string? #:chunk-size exact-positive-integer?
+                                     jsexpr?)])
+
 (define (download path write-chunk #:chunk-size [chunk-size (* 4 1024 1024)])
   (define-values (status headers contents) (/2/files/download (hasheq 'path path)))
   (cond
@@ -109,6 +113,8 @@
      jsexpr]
     [(headers->dropbox-api-result headers) => (λ (x) (error 'download x))]
     [else (error 'download (port->string contents))]))
+(provide/contract [download (-> string? (-> bytes? any) #:chunk-size exact-positive-integer?
+                                jsexpr?)])
 
 (define (/2/files/upload_session/start json data)
   (data-api content.dropboxapi.com "/2/files/upload_session/start" json #:data data))
@@ -131,6 +137,7 @@
           [(string=? ch (hash-ref result 'content_hash)) result]
           [else
            (error 'upload-file "mismatch content-hash")])))))
+(provide/contract [upload-file (-> string? string? jsexpr?)])
 
 (define (upload path read-chunk)
   (define-values (status headers content)
@@ -169,3 +176,4 @@
              (error 'upload (port->string content))])]))]
     [else
      (error 'upload (port->string content))]))
+(provide/contract [upload-file (-> string? (-> bytes?) jsexpr?)])
