@@ -120,19 +120,19 @@
   (data-api content.dropboxapi.com "/2/files/upload_session/finish" json
             #:headers (list "Content-Type: application/octet-stream")))
 
-(define (upload-file f path)
+(define (upload-file path f)
   (let ([ch (content-hash f)])
     (call-with-input-file f
       (λ (ip)
         (define chunk-size (* 4 1024 1024))
         (define (read-chunk) (read-bytes (current-chunk-size) ip))
-        (define result (call-with-upload read-chunk))
+        (define result (upload path read-chunk))
         (cond
           [(string=? ch (hash-ref result 'content_hash)) result]
           [else
            (error 'upload-file "mismatch content-hash")])))))
 
-(define (upload read-chunk)
+(define (upload path read-chunk)
   (define-values (status headers content)
     (/2/files/upload_session/start (hasheq) (read-chunk)))
   (cond
