@@ -113,7 +113,7 @@
      jsexpr]
     [(headers->dropbox-api-result headers) => (λ (x) (error 'download x))]
     [else (error 'download (port->string contents))]))
-(provide/contract [download (-> string? (-> bytes? any) #:chunk-size exact-positive-integer?
+(provide/contract [download (-> string? (-> bytes? any/c) #:chunk-size exact-positive-integer?
                                 jsexpr?)])
 
 (define (/2/files/upload_session/start json data)
@@ -131,7 +131,7 @@
     (call-with-input-file f
       (λ (ip)
         (define chunk-size (* 4 1024 1024))
-        (define (read-chunk) (read-bytes (current-chunk-size) ip))
+        (define (read-chunk) (read-bytes chunk-size ip))
         (define result (upload path read-chunk))
         (cond
           [(string=? ch (hash-ref result 'content_hash)) result]
@@ -140,8 +140,9 @@
 (provide/contract [upload-file (-> string? string? jsexpr?)])
 
 (define (upload path read-chunk)
+  (define chunk (read-chunk))
   (define-values (status headers content)
-    (/2/files/upload_session/start (hasheq) (read-chunk)))
+    (/2/files/upload_session/start (hasheq) chunk))
   (cond
     [(ok? status)
      (define result (read-json content))
@@ -176,4 +177,4 @@
              (error 'upload (port->string content))])]))]
     [else
      (error 'upload (port->string content))]))
-(provide/contract [upload-file (-> string? (-> bytes?) jsexpr?)])
+(provide/contract [upload (-> string? (-> bytes?) jsexpr?)])
