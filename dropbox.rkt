@@ -121,7 +121,7 @@
   (if (string=? (content-hash filename) (hash-ref jsexpr 'content_hash))
       jsexpr
       (error 'download-file "mismatch content-hash" filename)))
-(provide/contract [download-file (-> string? string? #:chunk-size exact-positive-integer?
+(provide/contract [download-file (->* (string? string?) (#:chunk-size exact-positive-integer?)
                                      jsexpr?)])
 
 (define (download path write-chunk #:chunk-size [chunk-size (* 4 1024 1024)])
@@ -139,7 +139,7 @@
      jsexpr]
     [(headers->dropbox-api-result headers) => (λ (x) (error 'download x))]
     [else (error 'download (port->string contents))]))
-(provide/contract [download (-> string? (-> bytes? any/c) #:chunk-size exact-positive-integer?
+(provide/contract [download (->* (string? (-> bytes? any/c)) (#:chunk-size exact-positive-integer?)
                                 jsexpr?)])
 
 (define (/2/files/upload_session/start json data)
