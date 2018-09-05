@@ -142,6 +142,17 @@
 (provide/contract [download (->* (string? (-> bytes? any/c)) (#:chunk-size exact-positive-integer?)
                                  jsexpr?)])
 
+(define (call-with-input-from-dropbox path proc #:limit [limit (* 4 1024 1024)])
+  (define-values (in out) (make-pipe))
+  (thread (download path (lambda (b) (write-bytes b out))))
+  (proc in)
+  (close-input-port in)
+  (close-output-port out))
+(provide/contract
+ [call-with-input-from-dropbox
+  (->* (string? (-> input-port? any/c)) (#:limit (or/c exact-positive-integer? false))
+       jsexpr?)])
+
 (define (/2/files/upload_session/start json data)
   (data-api content.dropboxapi.com "/2/files/upload_session/start" json #:data data))
 
@@ -204,3 +215,14 @@
     [else
      (error 'upload (port->string content))]))
 (provide/contract [upload (-> string? (-> (or/c bytes? eof-object?)) jsexpr?)])
+
+(define (call-with-output-to-dropbox path proc #:limit [limit (* 4 1024 1024)])
+  (define-values (in out) (make-pipe))
+  (thread (upload path (lambda () (read-bytes limit in))))
+  (proc out)
+  (close-output-port out)
+  (close-input-port in))
+(provide/contract
+ [call-with-output-to-dropbox
+  (->* (string? (-> output-port? any/c)) (#:limit (or/c exact-positive-integer? false))
+       jsexpr?)])
