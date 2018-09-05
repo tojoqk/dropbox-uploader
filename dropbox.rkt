@@ -140,7 +140,7 @@
     [(headers->dropbox-api-result headers) => (λ (x) (error 'download x))]
     [else (error 'download (port->string contents))]))
 (provide/contract [download (->* (string? (-> bytes? any/c)) (#:chunk-size exact-positive-integer?)
-                                jsexpr?)])
+                                 jsexpr?)])
 
 (define (/2/files/upload_session/start json data)
   (data-api content.dropboxapi.com "/2/files/upload_session/start" json #:data data))
