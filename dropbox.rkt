@@ -44,7 +44,7 @@
 (define (/2/files/list_folder/continue json)
   (json-api api.dropboxapi.com "/2/files/list_folder/continue" json))
 
-(define (list-folder path)
+(define (dropbox-list-folder path)
   (let ([path (if (string=? path "/") "" path)])
     (let-values ([(status headers containts) (/2/files/list_folder (hash 'path path))])
       (match (and (ok? status) (read-json containts))
@@ -69,23 +69,23 @@
                    [else #f])))
              entries)]
         [else #f]))))
-(provide/contract [list-folder (-> string? (or/c (listof jsexpr?) false/c))])
+(provide/contract [dropbox-list-folder (-> string? (or/c (listof jsexpr?) false/c))])
 
 (define (/2/files/delete_v2 jsexpr)
   (json-api api.dropboxapi.com "/2/files/delete_v2" jsexpr))
 
-(define (delete path)
+(define (dropbox-delete path)
   (let-values ([(status headers containts) (/2/files/delete_v2 (hash 'path path))])
     (and (ok? status) (read-json containts))))
-(provide/contract [delete (-> string? (or/c jsexpr? false/c))])
+(provide/contract [dropbox-delete (-> string? (or/c jsexpr? false/c))])
 
 (define (/2/files/create_folder_v2 jsexpr)
   (json-api api.dropboxapi.com "/2/files/create_folder_v2" jsexpr))
 
-(define (create-folder path)
+(define (dropbox-create-folder path)
   (let-values ([(status headers containts) (/2/files/create_folder_v2 (hash 'path path))])
     (and (ok? status) (read-json containts))))
-(provide/contract [create-folder (-> string? (or/c jsexpr? false/c))])
+(provide/contract [dropbox-create-folder (-> string? (or/c jsexpr? false/c))])
 
 (define content.dropboxapi.com "content.dropboxapi.com")
 
@@ -113,18 +113,18 @@
              (write-bytes (sha256 block) sp)
              (loop (read-block))]))))))
 
-(define (download-file path filename #:chunk-size [chunk-size (* 4 1024 1024)])
+(define (dropbox-download-file path filename #:chunk-size [chunk-size (* 4 1024 1024)])
   (define jsexpr
     (call-with-output-file filename
-      (λ (p) (download path (λ (chunk) (write-bytes chunk p))))
+      (λ (p) (dropbox-download path (λ (chunk) (write-bytes chunk p))))
       #:exists 'replace))
   (if (string=? (content-hash filename) (hash-ref jsexpr 'content_hash))
       jsexpr
-      (error 'download-file "mismatch content-hash" filename)))
-(provide/contract [download-file (->* (string? string?) (#:chunk-size exact-positive-integer?)
-                                     jsexpr?)])
+      (error 'dropbox-download-file "mismatch content-hash" filename)))
+(provide/contract [dropbox-download-file (->* (string? string?) (#:chunk-size exact-positive-integer?)
+                                              jsexpr?)])
 
-(define (download path write-chunk #:chunk-size [chunk-size (* 4 1024 1024)])
+(define (dropbox-download path write-chunk #:chunk-size [chunk-size (* 4 1024 1024)])
   (define-values (status headers contents) (/2/files/download (hasheq 'path path)))
   (cond
     [(ok? status)
@@ -138,13 +138,13 @@
           (loop (read-chunk))]))
      jsexpr]
     [(headers->dropbox-api-result headers) => (λ (x) (error 'download x))]
-    [else (error 'download (port->string contents))]))
-(provide/contract [download (->* (string? (-> bytes? any/c)) (#:chunk-size exact-positive-integer?)
-                                 jsexpr?)])
+    [else (error 'dropbox-download (port->string contents))]))
+(provide/contract [dropbox-download (->* (string? (-> bytes? any/c)) (#:chunk-size exact-positive-integer?)
+                                         jsexpr?)])
 
 (define (call-with-input-from-dropbox path proc #:limit [limit (* 4 1024 1024)])
   (define-values (in out) (make-pipe))
-  (thread (download path (lambda (b) (write-bytes b out))))
+  (thread (dropbox-download path (lambda (b) (write-bytes b out))))
   (proc in)
   (close-input-port in)
   (close-output-port out))
@@ -163,20 +163,20 @@
   (data-api content.dropboxapi.com "/2/files/upload_session/finish" json
             #:headers (list "Content-Type: application/octet-stream")))
 
-(define (upload-file path f)
+(define (dropbox-upload-file path f)
   (let ([ch (content-hash f)])
     (call-with-input-file f
       (λ (ip)
         (define chunk-size (* 4 1024 1024))
         (define (read-chunk) (read-bytes chunk-size ip))
-        (define result (upload path read-chunk))
+        (define result (dropbox-upload path read-chunk))
         (cond
           [(string=? ch (hash-ref result 'content_hash)) result]
           [else
            (error 'upload-file "mismatch content-hash")])))))
-(provide/contract [upload-file (-> string? string? jsexpr?)])
+(provide/contract [dropbox-upload-file (-> string? string? jsexpr?)])
 
-(define (upload path read-chunk)
+(define (dropbox-upload path read-chunk)
   (define chunk (read-chunk))
   (define-values (status headers content)
     (/2/files/upload_session/start (hasheq) chunk))
@@ -211,14 +211,14 @@
             [(ok? status)
              (loop (read-chunk) (+ offset (bytes-length chunk)))]
             [else
-             (error 'upload (port->string content))])]))]
+             (error 'dropbox-upload (port->string content))])]))]
     [else
-     (error 'upload (port->string content))]))
-(provide/contract [upload (-> string? (-> (or/c bytes? eof-object?)) jsexpr?)])
+     (error 'dropbox-upload (port->string content))]))
+(provide/contract [dropbox-upload (-> string? (-> (or/c bytes? eof-object?)) jsexpr?)])
 
 (define (call-with-output-to-dropbox path proc #:limit [limit (* 4 1024 1024)])
   (define-values (in out) (make-pipe))
-  (thread (upload path (lambda () (read-bytes limit in))))
+  (thread (dropbox-upload path (lambda () (read-bytes limit in))))
   (proc out)
   (close-output-port out)
   (close-input-port in))
