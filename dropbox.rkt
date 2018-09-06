@@ -116,42 +116,37 @@
 (define (dropbox-download-file path filename #:chunk-size [chunk-size (* 4 1024 1024)])
   (define jsexpr
     (call-with-output-file filename
-      (λ (p) (dropbox-download path (λ (chunk) (write-bytes chunk p))))
+      (λ (out)
+        (call-with-input-from-dropbox
+         path
+         (λ (in)
+           (let loop ()
+             (define bs (read-bytes chunk-size in))
+             (cond
+               [(eof-object? bs) (void)]
+               [else
+                (write-bytes bs out)
+                (loop)])))))
       #:exists 'replace))
   (if (string=? (content-hash filename) (hash-ref jsexpr 'content_hash))
       jsexpr
       (error 'dropbox-download-file "mismatch content-hash" filename)))
-(provide/contract [dropbox-download-file (->* (string? string?) (#:chunk-size exact-positive-integer?)
+(provide/contract [dropbox-download-file (->* (string? string?)
+                                              (#:chunk-size exact-positive-integer?)
                                               jsexpr?)])
 
-(define (dropbox-download path write-chunk #:chunk-size [chunk-size (* 4 1024 1024)])
+(define (call-with-input-from-dropbox path proc)
   (define-values (status headers contents) (/2/files/download (hasheq 'path path)))
   (cond
     [(ok? status)
      (define jsexpr (headers->dropbox-api-result headers))
-     (define (read-chunk) (read-bytes chunk-size contents))
-     (let loop ([chunk (read-chunk)])
-       (cond
-         [(eof-object? chunk) 'done]
-         [else
-          (write-chunk chunk)
-          (loop (read-chunk))]))
+     (proc contents)
      jsexpr]
     [(headers->dropbox-api-result headers) => (λ (x) (error 'download x))]
     [else (error 'dropbox-download (port->string contents))]))
-(provide/contract [dropbox-download (->* (string? (-> bytes? any/c)) (#:chunk-size exact-positive-integer?)
-                                         jsexpr?)])
-
-(define (call-with-input-from-dropbox path proc #:limit [limit (* 4 1024 1024)])
-  (define-values (in out) (make-pipe))
-  (thread (dropbox-download path (lambda (b) (write-bytes b out))))
-  (proc in)
-  (close-input-port in)
-  (close-output-port out))
 (provide/contract
  [call-with-input-from-dropbox
-  (->* (string? (-> input-port? any/c)) (#:limit (or/c exact-positive-integer? false))
-       jsexpr?)])
+  (-> string? (-> input-port? any/c) void?)])
 
 (define (/2/files/upload_session/start json data)
   (data-api content.dropboxapi.com "/2/files/upload_session/start" json #:data data))
