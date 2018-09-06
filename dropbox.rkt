@@ -56,7 +56,8 @@
              (let continue ([cursor cursor]
                             [entries (reverse entries)])
                (sleep 0.1)
-               (let-values ([(status headers containts) (/2/files/list_folder/continue (hash 'cursor cursor))])
+               (let-values ([(status headers containts) (/2/files/list_folder/continue
+                                                         (hash 'cursor cursor))])
                  (match (and (ok? status) (read-json containts))
                    [(hash-table
                      ('has_more has-more?)
