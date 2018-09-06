@@ -158,66 +158,71 @@
   (data-api content.dropboxapi.com "/2/files/upload_session/finish" json
             #:headers (list "Content-Type: application/octet-stream")))
 
-(define (dropbox-upload-file path f)
-  (let ([ch (content-hash f)])
-    (call-with-input-file f
-      (λ (ip)
-        (define chunk-size (* 4 1024 1024))
-        (define (read-chunk) (read-bytes chunk-size ip))
-        (define result (dropbox-upload path read-chunk))
-        (cond
-          [(string=? ch (hash-ref result 'content_hash)) result]
-          [else
-           (error 'upload-file "mismatch content-hash")])))))
-(provide/contract [dropbox-upload-file (-> string? string? jsexpr?)])
+(define (dropbox-upload-file path filename #:chunk-size [chunk-size (* 4 1024 1024)])
+  (define jsexpr
+    (call-with-input-file filename
+      (λ (in)
+        (call-with-output-to-dropbox
+         path
+         (λ (out)
+           (let loop ()
+             (define bs (read-bytes chunk-size in))
+             (cond
+               [(eof-object? bs) (void)]
+               [else
+                (write-bytes bs out)
+                (loop)])))))))
+  (if (string=? (content-hash filename) (hash-ref jsexpr 'content_hash))
+      jsexpr
+      (error 'dropbox-upload-file "mismatch content-hash" filename)))
+(provide/contract [dropbox-upload-file (->* (string? string?)
+                                            (#:chunk-size exact-positive-integer?)
+                                            jsexpr?)])
 
-(define (dropbox-upload path read-chunk)
-  (define chunk (read-chunk))
+(define (call-with-output-to-dropbox path proc)
   (define-values (status headers content)
-    (/2/files/upload_session/start (hasheq) chunk))
+    (/2/files/upload_session/start (hasheq) #""))
+  (define result #f)
   (cond
     [(ok? status)
-     (define result (read-json content))
-     (define session-id (hash-ref result 'session_id))
-     (let loop ([chunk (read-chunk)]
-                [offset (bytes-length chunk)])
-       (cond
-         [(eof-object? chunk)
-          (define-values (status headers content)
-            (/2/files/upload_session/finish
-             (hasheq 'cursor
-                     (hasheq 'session_id session-id
-                             'offset offset)
-                     'commit
-                     (hasheq 'path path
-                             'mode "overwrite"))))
-          (cond
-            [(ok? status) (read-json content)]
-            [else
-             (error 'upload (port->string content))])]
-         [else
+     (define jsexpr (read-json content))
+     (define session-id (hash-ref jsexpr 'session_id))
+     (define offset 0)
+     (define out
+       (make-output-port
+        'dropbox-uploader
+        always-evt
+        (lambda (chunk start end non-block? brackable?)
           (define-values (status headers content)
             (/2/files/upload_session/append
              (hasheq 'cursor
                      (hasheq 'session_id session-id
                              'offset offset))
-             chunk))
+             (subbytes chunk 0 (- end start))))
+          (set! offset (+ offset (- end start)))
           (cond
-            [(ok? status)
-             (loop (read-chunk) (+ offset (bytes-length chunk)))]
+            [(ok? status) (- end start)]
             [else
-             (error 'dropbox-upload (port->string content))])]))]
+             (error 'dropbox-upload (port->string content))]))
+        (thunk
+         (define-values (status headers content)
+           (/2/files/upload_session/finish
+            (hasheq 'cursor
+                    (hasheq 'session_id session-id
+                            'offset offset)
+                    'commit
+                    (hasheq 'path path
+                            'mode "overwrite"))))
+         (cond
+           [(ok? status)
+            (set! result (read-json content))]
+           [else
+            (error 'upload (port->string content))]))))
+     (proc out)
+     (close-output-port out)
+     result]
     [else
      (error 'dropbox-upload (port->string content))]))
-(provide/contract [dropbox-upload (-> string? (-> (or/c bytes? eof-object?)) jsexpr?)])
-
-(define (call-with-output-to-dropbox path proc #:limit [limit (* 4 1024 1024)])
-  (define-values (in out) (make-pipe))
-  (thread (dropbox-upload path (lambda () (read-bytes limit in))))
-  (proc out)
-  (close-output-port out)
-  (close-input-port in))
 (provide/contract
  [call-with-output-to-dropbox
-  (->* (string? (-> output-port? any/c)) (#:limit (or/c exact-positive-integer? false))
-       jsexpr?)])
+  (-> string? (-> output-port? any/c) jsexpr?)])
