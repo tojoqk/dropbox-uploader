@@ -147,7 +147,7 @@
     [else (error 'dropbox-download (port->string contents))]))
 (provide/contract
  [call-with-input-from-dropbox
-  (-> string? (-> input-port? any/c) void?)])
+  (-> string? (-> input-port? any/c) jsexpr?)])
 
 (define (/2/files/upload_session/start json data)
   (data-api content.dropboxapi.com "/2/files/upload_session/start" json #:data data))
