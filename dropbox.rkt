@@ -43,10 +43,11 @@
 (define (/2/files/get_metadata json)
   (json-api api.dropboxapi.com "/2/files/get_metadata" json))
 
-(define (get-metadata path)
-  (let-values ([(status headers containts) (/2/files/get_metadata (hash 'path path))])
-    (and (ok? status) (read-json containts))))
-(provide/contract [get-metadata (-> string? (or/c jsexpr? false/c))])
+(define (dropbox-get-metadata path)
+  (call-with-response /2/files/get_metadata (hash 'path path)
+    (lambda (status headers containts)
+      (and (ok? status) (read-json containts)))))
+(provide/contract [dropbox-get-metadata (-> string? (or/c jsexpr? false/c))])
 
 (define (/2/files/list_folder json)
   (json-api api.dropboxapi.com "/2/files/list_folder" json))
